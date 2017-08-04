@@ -1,0 +1,868 @@
+﻿Myles Johnson-Gray
+UD CISC 636 - Dr. Li Liao - Homework #1 Submission
+Due October 4, 2016
+
+
+1. (code)
+
+
+#!/usr/local/perl
+#Genome Mutation using PAM matrix
+#UD CISC 636 - Dr. Li Liao - Homework #1
+#Code written by Myles Johnson-Gray (mjgray@udel.edu) 
+#----------------------------------------------------------------------------------------------------
+
+
+use POSIX; #to use ceil(), floor()
+
+
+#INITIALIZATION (open the PAM matrix and generate a random amin acid sequence)
+#contributions from Dr. Li Liao (lilia0@udel.edu)
+
+
+#open supplied PAM matrix
+open(F, "C:/Users/Myles/Documents/School/UD/CompBio/pam1.txt");
+
+
+$line = <F>; # read first line
+$line =~ s/^\s+//; # remove beginning spaces.
+@aa = split(/\s+/,$line); # this array has the twenty amino acids
+
+
+$i=0;
+while($line = <F>) {
+  @col = split(/\s+/,$line);
+  shift(@col);
+  for($j=0; $j<=$#col; $j++) {
+    $s{$aa[$i]}{$aa[$j]} = $col[$j];  # score matrix indexed by amino acid single letter code
+  }
+  $i++;
+}
+close(F); #close PAM matrix
+
+
+#print "$s{A}{V}\n";  # you can access the score for a given amino acid pair
+print "Initial \"ancestor\" sequence below:"; #print inital ancestor sequence
+print "\n---------------------------------------------------------\n";
+
+
+$i=0;
+while($i<500) {
+  $r = int(rand()*20); #random integer between 1 and 20
+  $seq .= $aa[$r];  # concatenate aa to seq
+  $i++;
+}
+
+
+print $seq;  # this is a random sequence of 500 aa
+print "\n---------------------------------------------------------\n";
+
+
+$ancestor = $seq;
+
+
+$array_length = scalar @aa; #length of amino acid array (20 different amino acids)
+
+
+#----------------------------------------------------------------------------------------------------
+
+
+#MUTATE SEQUENCE (mutate a given amino acid sequence using a PAM matrix)
+
+
+sub mutate_seq
+{
+  #Function inputs & variable initialization
+  my $mutated_seq = $_[0];#input amino acid sequence
+  my $num_loops = $_[1]; #number of times to attempt mutation
+  $mut_count = 0; #count of the total mutations occured
+  
+  print "Preparing to mutate sequence...\n";
+  
+  #Attempt to preform mutation the specified number of times.
+  for($h=0; $h<$num_loops; $h++){
+    
+    #Iterate over the input amino acid sequence.
+    for($i=0; $i<length($mutated_seq); $i++){
+      $mutation = int rand(10100); #generate random number to guide mutation
+      $char = substr($mutated_seq, $i, 1); #holds the current amino acid character
+      $score = 0; #holds current PAM matrix score
+      
+      #Add up scores from PAM matrix to determine the mutation.
+      for($j=0; $j < $array_length; $j++){        
+        $score = $s{$char}{@aa[$j]} + $score; #add amino acid pair score to current score
+        #print "[$char][@aa[$j]] $score - $mutation \n"; #(For debugging. Prints aa pair, current score, and random number.) 
+        
+        #The outcome (mutation or not...) has been chosen.
+        if($score >= $mutation){
+          if($char ne @aa[$j]){ #if a mutation (amino acid change) has been chosen...
+            substr($mutated_seq, $i, 1) = @aa[$j]; #mutate amino acid sequence at current spot
+            $mut_count+=1; #increment mutation counter
+          }
+          last; #if some outcome has been chosen, break out of this loop
+        }      
+      }
+    }
+  }
+  
+  #Format and output information to the user.
+  print "Mutation complete (mutated sequence below). \n";
+  print "Total number of mutations: $mut_count";
+  print "\n---------------------------------------------------------\n";  
+  print $mutated_seq;
+  print "\n---------------------------------------------------------\n";  
+  return($mutated_seq); 
+}
+
+
+#----------------------------------------------------------------------------------------------------
+
+
+#LOGARITHM FUNCTION (returns the log of a number with the specified base)
+sub log_N
+{
+  my $num = shift; #number to be log'd
+  my $base = shift; # base for log
+  return log($num)/log($base);
+}
+
+
+#----------------------------------------------------------------------------------------------------
+
+
+#MAIN EXECUTION: (Generate two mutants and populate the subsitution scoring matrix)
+
+
+#Create two mutations from the ancestor sequence.
+$mutant1 = mutate_seq($ancestor, 50);
+$mutant2 = mutate_seq($ancestor, 50);
+
+
+#Traverse all pairs of amino acid pairs.
+for($i=0; $i<$array_length; $i++){
+  for($j=0; $j<$array_length; $j++){
+    #Initialize variables
+    $aa_count1 = 0; #occurances of amino acid in mutant1
+    $aa_count2 = 0; #occurances of amino acid in mutant2
+    $align_count = 0; #number of times the amino acid pairs are aligned
+    $aa_score = 0; # holds the score for the current amino acid pair
+
+
+    #Iterate through both mutant sequences.
+    for($k=0; $k<length($mutant1); $k++){
+      
+      if(substr($mutant1, $k, 1) eq @aa[$i]){ #if amino acid #1 is found in mutant1
+        $aa_count1+=1; #increment counter
+      }
+      if(substr($mutant2, $k, 1) eq @aa[$j]){ #if amino acid #2 is found in mutant2
+        $aa_count2+=1; #increment counter
+      }
+      
+      #If the sequences are aligned...
+      if((substr($mutant1, $k, 1) eq @aa[$i] && substr($mutant2, $k, 1) eq @aa[$j]) || 
+      (substr($mutant1, $k, 1) eq @aa[$j] && substr($mutant2, $k, 1) eq @aa[$i])){  
+        $align_count+=1; #increment the alignment calculator
+      }     
+    }
+    
+    #Calculate the PAM50 score for the amino acid pair: S(i,j) = log[f(i,j) / f(i)f(j))]
+    $aa_score = ($align_count / 500) / (($aa_count1 / 500)*($aa_count2 / 500 )); 
+    #$aa_score = (($align_count+.1) / (500+.1)) / (($aa_count1+.1) / (500+.1))*(($aa_count2+.1)/ (500+.1));  #PSUEDOCOUNT??
+    
+    if($aa_score != 0){ #check to protect against zero division
+      $aa_score = log_N($aa_score, 2); #take log(base2) of the score
+    }
+
+
+    #Round the scores to integer values(COMMENT OUT IF YOU WANT).
+    # if($number < 0.0){
+    #   $aa_score = floor($aa_score); #round down
+    # }
+    # else{
+    #   $aa_score = ceil($aa_score); #round up
+    # }
+    
+    #Populate scoring matrix with amino acid pair score
+    $score_matrix{@aa[$i]}{@aa[$j]} = $aa_score;
+  }
+}
+
+
+#Display the substiution score matrix (
+print"Printing scoring matrix to \"PAM50_results.txt\"\n";
+my $filename = 'PAM50_results.txt';  #name of output file
+open(my $fh, '>', $filename); 
+print $fh "PAM 50 Substitution Scoring Matrix: <aa,aa> pair and resulting score. \n\n";
+
+
+#Output <aa,aa> pair with resulting score.
+for($i = 0; $i < $array_length; $i++) {                        
+    for($j = 0; $j < $array_length; $j++) {                   
+        #print "<@aa[$i]@aa[$j]> -> $score_matrix{@aa[$i]}{@aa[$j]}\n"; #outputs results to console...good for debugging
+        print $fh "<@aa[$i]@aa[$j]> -> $score_matrix{@aa[$i]}{@aa[$j]}\n";
+    }
+}
+close $fh; #close output file
+print"\n";
+
+
+# print "$score_matrix{A}{A}\n"; #You can acess the substitution score matrix in this way.
+
+
+1. (results)
+
+
+See emailed “PAM50_results.txt” for output example.
+
+
+2.a.
+
+
+
+
+
+
+	
+
+	col:1
+	col:2
+	col:3
+	col:4
+	col:5
+	col:6
+	col:7
+	col:8
+	col:9
+	
+
+	
+
+	
+
+	C
+	A
+	C
+	G
+	T
+	A
+	C
+	G
+	row:1
+	
+
+	0
+	-8
+	-16
+	-24
+	-32
+	-40
+	-48
+	-56
+	-64
+	row:2
+	T
+	-8
+	-2(D)
+	-10(L)
+	-18(B)
+	-26(L)
+	-28(D)
+	-36(L)
+	-44(L)
+	-52(L)
+	row:3
+	A
+	-16
+	-10(D)
+	2(D)
+	-6(L)
+	-14(L)
+	-22(L)
+	-24(D)
+	-32(L)
+	-40(L)
+	row:4
+	G
+	-24
+	-18(U)
+	-6(U)
+	-1(D)
+	-2(D)
+	-10(L)
+	-18(L)
+	-26(L)
+	-28(D)
+	row:5
+	G
+	-32
+	-26(U)
+	-14(U)
+	-9(B)
+	3(D)
+	2(D)
+	-6(L)
+	-14(L)
+	-22(B)
+	row:6
+	A
+	-40
+	-34(U)
+	-22(B)
+	-17(B)
+	-5(U)
+	0(D)
+	6(D)
+	-2(L)
+	-10(L)
+	row:7
+	C
+	-48
+	-36(D)
+	-30(U)
+	-18(D)
+	-13(U)
+	-7(D)
+	-2(U)
+	10(D)
+	-2(L)
+	row:8
+	A
+	-56
+	-44(U)
+	-32(D)
+	-26(U)
+	-20(D)
+	-15(U)
+	-3(D)
+	-5(D)
+	8(D)
+	row:9
+	T
+	-64
+	-52(U)
+	-40(U)
+	-34(B)
+	-28(U)
+	-16(D)
+	-11(U)
+	-5(D)
+	0(U)
+	row:10
+	G
+	-72
+	-60(U)
+	-48(U)
+	-42(U)
+	-30(D)
+	-24(U)
+	-18(D)
+	-13(U)
+	-1(D)
+	
+
+
+
+Best resulting alignment and score (path shown in red):
+
+
+x=TAGG-ACATG
+y=CACGTACG--
+Score = 27
+
+
+2.b.
+
+
+
+
+
+
+	col:1
+	col:2
+	col:3
+	col:4
+	col:5
+	col:6
+	col:7
+	col:8
+	col:9
+	col:10
+	
+
+	
+
+	
+
+	C
+	A
+	C
+	G
+	T
+	A
+	C
+	G
+	row:1
+	
+
+	0
+	0
+	0
+	0
+	0
+	0
+	0
+	0
+	0
+	row:2
+	T
+	0
+	0
+	0
+	0
+	0
+	4(D)
+	0
+	0
+	0
+	row:3
+	A
+	0
+	0
+	4(D)
+	0
+	0
+	0
+	8(D)
+	0
+	0
+	row:4
+	G
+	0
+	0
+	0
+	1(D)
+	4(D)
+	0
+	0
+	5(D)
+	4(D)
+	row:5
+	G
+	0
+	0
+	0
+	0
+	5(D)
+	1(D)
+	0
+	0
+	9(D)
+	row:6
+	A
+	0
+	0
+	4(D)
+	0
+	0
+	2(D)
+	5(D)
+	0
+	1(U)
+	row:7
+	C
+	0
+	4(D)
+	0
+	8(D)
+	0
+	0
+	0
+	9(D)
+	1(L)
+	row:8
+	A
+	0
+	0
+	8(D)
+	0
+	6(D)
+	0
+	4(D)
+	1(U)
+	7(D)
+	row:9
+	T
+	0
+	0
+	0
+	6(D)
+	0
+	10(D)
+	2(L)
+	2(D)
+	0
+	row:10
+	G
+	0
+	0
+	0
+	0
+	10(D)
+	2(L)
+	8(D)
+	0
+	6(D)
+	
+
+Best resulting alignment and score (path shown in red):
+
+
+There are two alignments with the max score:
+
+
+Starting from <row:10, col:6>
+x=CATG
+y=CACG
+Score = 28
+
+
+Starting from <row:9, col:7>
+x=ACAT
+y=ACGT
+Score = 28
+
+
+
+
+
+
+3. (code)
+
+
+#!/usr/local/perl
+# Needleman-Wunsch  Algorithm for Global Alignment of DNA Sequences
+#UD CISC 636 - Dr. Li Liao - Homework #1
+#Code written by Myles Johnson-Gray (mjgray@udel.edu) 
+#----------------------------------------------------------------------------------------------------
+
+
+use Getopt::Std; # to allow optional command line arguements
+
+
+#If there exists an "-o" option on cmd line, assign the value to $opt_o.
+getopt(o); 
+# Usage statement for input arguments (optional command line arg  "-o 1" , input_file)
+die "Usage: $0 -o 1 <input file>\n" unless @ARGV == 1;
+my $input_file = @ARGV[0]; # store file path
+
+
+#----------------------------------------------------------------------------------------------------
+
+
+# SCORING SCHEME (determine methodology for scoring alignment)
+my $MATCH    =  4; # +4 for letters that match
+my $TRANSISTION = -2; # -2 for a transistion (purine->purine OR pyrimidine->pyrimidine)
+my $TRANSVERSION = -3; # -3 for a transversion (purine->pyrimidine OR vice versa)
+my $GAP      = -8; # -8 for any gap
+
+
+#----------------------------------------------------------------------------------------------------
+
+
+#PROCESS TEXT FILE (parse the input file *in FASTA format* and extract the two sequences)
+
+
+sub process_file{
+    #Initialize sequence strings.
+    $seq1 = "";
+    $seq2 = "";
+
+
+    #Open input file.
+    open(my $fh, '<:encoding(UTF-8)', $input_file)
+      or die "Could not open file '$input_file' $!"; #exit if file can't be found
+     
+    $seq_count = 0; #keeps track of sequence occurances
+     
+     #Read each line of the file.
+    while (my $row = <$fh>) {
+        if (index($row, ">") == -1) { #if there is no ">" on the line, then there is a sequence to read in
+            if ($seq_count < 1){ #first sequence is found
+                chomp $row;
+                $seq1 = $seq1 . $row; #assign sequence to seq1
+            }
+            else{ #second sequence
+                chomp $row;
+                $seq2 = $seq2 . $row; #assign sequence to seq2
+            }     
+            $seq_count += 1;       
+        }
+    }
+
+
+    #Print the two sequences.
+    print "Input sequences:\n";
+    print "---------------------------------------------------------\n";
+    print "$seq1\n";
+    print "$seq2\n";
+}
+
+
+#----------------------------------------------------------------------------------------------------
+
+
+#OUTPUT DP TABLE (called using optional cmd line arg "-o 1" ... outputs dynamic programming table)
+
+
+sub output_DP{
+    #Create output file that contains DP table.
+    print"Printing DP table to \"align_results.txt\"\n";
+    my $filename = 'align_results.txt';  #name of output file
+    open(my $fh, '>', $filename); 
+    print $fh "Dynamic Programming Table: <row, column> pair and resulting score. \n\n";
+
+
+    #Iterate through table and display score and pointer for each row/col combination.
+    for($i = 0; $i <= length($seq2); $i++) {                        
+        for($j = 0; $j <= length($seq1); $j++) {                   
+            $char1 =" "; #initialize char1 string
+            $char2 =" "; #initialize char2 string
+            
+            if ($i > 0){ #first row of table isn't occupied by nuclueotide character
+                $char2= substr($seq2, $i-1, 1); #assign the current character in seq2
+            }
+            if ($j > 0){ #first column of table isn't occupied by nucluoetide character
+                $char1 = substr($seq1, $j-1, 1); #assign the current character in seq1           
+            }
+            
+            #Output <row,column> pair with resulting score.
+            #print "row($i):$char2 -> col($j):$char1     ($matrix[$i][$j]{score})\n"; #this will print to the console output (for debugging)
+            print $fh "row($i):$char2 -> col($j):$char1     ($matrix[$i][$j]{score})\n";
+        }
+    }
+    close $fh; #close output file
+}
+
+
+#----------------------------------------------------------------------------------------------------
+
+
+#*******************MAIN  EXECUTION*******************
+
+
+process_file(); #read input file into two sequences
+
+
+#INITIALIZATION (initialize and fill the dynamic programming table)
+
+
+@matrix; #initialize hash/table
+
+
+#Prepare the first column and row of the table.
+$matrix[0][0]{score}   = 0;
+$matrix[0][0]{pointer} = "none";
+for(my $j = 1; $j <= length($seq1); $j++) {
+    $matrix[0][$j]{score}   = $GAP * $j;
+    $matrix[0][$j]{pointer} = "left";
+}
+for (my $i = 1; $i <= length($seq2); $i++) {
+    $matrix[$i][0]{score}   = $GAP * $i;
+    $matrix[$i][0]{pointer} = "up";
+}
+
+
+# Fill the inside of the dynamic programming table.
+for(my $i = 1; $i <= length($seq2); $i++) {
+    for(my $j = 1; $j <= length($seq1); $j++) {
+        my ($diagonal_score, $left_score, $up_score);
+
+
+        #Retrive the current characters of the input sequences.
+        my $letter1 = substr($seq1, $j-1, 1);
+        my $letter2 = substr($seq2, $i-1, 1);                         
+   
+        #Calculate the scores for a match or mismatch.
+        if ($letter1 eq $letter2) { #if characters are aligned...
+            $diagonal_score = $matrix[$i-1][$j-1]{score} + $MATCH;
+        }
+        #If there is a mismatch....(transistion vs. transversion)
+        elsif(($letter1 eq "A" && $letter2 eq "G") || ($letter1 eq "G" && $letter2 eq "A") || ($letter1 eq "C" && $letter2 eq "T") || ($letter1 eq "T" && $letter2 eq "C")) { #if transistion..
+            $diagonal_score = $matrix[$i-1][$j-1]{score} + $TRANSISTION; 
+        }
+        elsif(($letter1 eq "A" && $letter2 eq "C") || ($letter1 eq "C" && $letter2 eq "A") || ($letter1 eq "A" && $letter2 eq "T") || ($letter1 eq "T" && $letter2 eq "A")
+        || ($letter1 eq "G" && $letter2 eq "C") || ($letter1 eq "C" && $letter2 eq "G") || ($letter1 eq "G" && $letter2 eq "T") || ($letter1 eq "T" && $letter2 eq "G")) { #if transversion..
+            $diagonal_score = $matrix[$i-1][$j-1]{score} + $TRANSVERSION; 
+        }
+  
+        #Calculate the scores for a gap.
+        $up_score   = $matrix[$i-1][$j]{score} + $GAP;
+        $left_score = $matrix[$i][$j-1]{score} + $GAP;
+
+
+        #Choose the best possible score.
+        if ($diagonal_score >= $up_score) {
+            if ($diagonal_score >= $left_score) {
+                $matrix[$i][$j]{score}   = $diagonal_score; #assign diagonal score
+                $matrix[$i][$j]{pointer} = "diagonal";
+            }
+            else {
+                $matrix[$i][$j]{score}   = $left_score; #assign left score
+                $matrix[$i][$j]{pointer} = "left";
+            }
+        } 
+        else {
+            if ($up_score >= $left_score) {
+                $matrix[$i][$j]{score}   = $up_score; #assign up score
+                $matrix[$i][$j]{pointer} = "up";
+            }
+            else {
+                $matrix[$i][$j]{score}   = $left_score; #assign left score
+                $matrix[$i][$j]{pointer} = "left";
+            }
+        }
+    }
+}
+
+
+#----------------------------------------------------------------------------------------------------
+
+
+# TRACEBACK (retrace backwards to find the best alignment)
+
+
+#Initilaize  alignment strings.
+my $align1 = "";
+my $align2 = "";
+
+
+#Start at the last cell of the matrix. 
+my $j = length($seq1);
+my $i = length($seq2);
+
+
+while (1) {
+    last if $matrix[$i][$j]{pointer} eq "none"; # end if you reach the first cell of the matrix
+    
+        if ($matrix[$i][$j]{pointer} eq "diagonal") { #if diagonal pointer...
+            $align1 .= substr($seq1, $j-1, 1);
+            $align2 .= substr($seq2, $i-1, 1);
+            $i--;
+            $j--;
+        }
+        elsif ($matrix[$i][$j]{pointer} eq "left") { #elif left pointer...
+            $align1 .= substr($seq1, $j-1, 1);
+            $align2 .= "-";
+            $j--;
+        }   
+        elsif ($matrix[$i][$j]{pointer} eq "up") { #elif up pointer...
+            $align1 .= "-";
+            $align2 .= substr($seq2, $i-1, 1);
+            $i--;
+        }    
+}
+
+
+#Reverse and output the alignments.
+$align1 = reverse $align1;
+$align2 = reverse $align2;
+print "\nReporting best alignment given scoring scheme: \n";
+print "---------------------------------------------------------\n";
+print "$align1\n\n";
+print "$align2\n\n";
+
+
+#If option "-o 1" is given, output the DP table to align_results.txt
+if($opt_o == 1){
+    output_DP();
+}
+print "---------------------------------------------------------\n";
+
+
+
+
+
+
+3. (results)
+
+
+See emailed “align_results.txt” for output example.
+
+
+4.
+
+
+Longest three open reading frames (ORF) of the given sequence: 
+
+
+>ORF number 1 in reading frame 1 on the direct strand extends from base 3976 to base 4557.
+ATGTTAGAAAACCCACAAGAAGCAAACGCTATCATCAGAAAAACACTTTTAGCTCAAGAA
+GCGAGAAGAAGAAGTCAAGAGGCTAGGGAGTTAACTCGTCGTAAATCACCTTTTGATAGT
+GGTTCATTACCAGGTAAATTAGCTGATTGTACAACCAGAGATCCTTCGATTAGTGAACTT
+TACATTGTTGAGGGTGATAGTGCTGGTGGCACTGCTAAAACAGGAAGAGATCGTTATTTT
+CAAGCTATCTTACCCTTAAGAGGAAAGATTTTAAACGTTGAAAAATCTAACTTTGAACAA
+ATCTTTAATAATGCAGAAATTTCTGCATTAGTGATGGCAATAGGCTGTGGGATTAAACCT
+GATTTTGAACTTGAAAAACTTAGATATAGCAAGATTGTGATCATGACAGATGCTGATGTT
+GATGGTGCACACATAAGAACACTTCTCTTAACTTTCTTTTTTCGCTTTATGTATCCTTTG
+GTTGAACAAGGCAATATTTTTATTGCTCAACCCCCACTTTATAAAGTGTCATATTCCCAT
+AAGGATTTATACATGCACACTGATGTTCAACTTGAACAGTGA
+
+
+Results:
+Mycoplasma genitalium M6320, complete genome
+bit score: 1186 bits(642)        
+e-score: 0.0        
+identity %: 100%
+gap %: 0%
+starting position on query sequence(ATG, 1)
+YES, the starting position corresponds to the first AUG in the ORF.
+
+
+>ORF number 3 in reading frame 1 on the direct strand extends from base 8551 to base 9183.
+ATGAATAAAGGTGTTTTTGTTGTTATTGAAGGAGTTGATGGAGCGGGCAAAACTGCTTTA
+ATTGAAGGTTTTAAAAAACTTTATCCAACTAAGTTTTTGAACTATCAACTTACTTATACT
+AGAGAACCTGGTGGTACTTTGTTAGCTGAAAAAATTCGTCAACTTCTTTTAAATGAAACA
+ATGGAACCTCTAACTGAAGCTTATTTGTTTGCCGCAGCTAGAACTGAACATATCAGTAAG
+CTAATTAAACCAGCAATTGAAAAAGAACAACTAGTTATTTCAGATAGATTTGTTTTCTCT
+AGTTTTGCATACCAAGGATTAAGCAAAAAAATAGGCATTGATACAGTAAAACAGATTAAT
+CATCATGCGTTAAGAAATATGATGCCAAACTTTACCTTTATTTTGGATTGCAATTTTAAA
+GAAGCATTACAAAGGATGCAAAAGCGTGGTAATGATAATCTTCTTGATGAATTTATTAAA
+GGAAAGAATGATTTTGATACAGTTCGTTCTTATTATTTAAGCTTAGTTGATAAAAAAAAC
+TGTTTCTTGATTAATGGTGATAATAAACAAGAACACCTAGAGAAATTTATTGAATTGTTA
+ACAAGATGCTTACAACAACCCACGCATTACTAA
+
+
+
+
+Results:
+Mycoplasma genitalium M6320, complete genome
+bit score: 1170 bits(633)        
+e-score: 0.0        
+identity %: 100%
+gap %: 0%
+starting position on query sequence(ATG, 1)
+YES, the starting position corresponds to the first AUG in the ORF.
+
+
+>ORF number 4 in reading frame 1 on the direct strand extends from base 11251 to base 11892.
+ATGGAATACTTTGATGCACATTGTCATTTAAATTGTGAACCTTTACTGAGTGAAATTGAA
+AAAAGCATCGCTAATTTCAAATTAATTAATTTAAAAGCAAATGTTGTAGGTACAGATTTG
+GATAATTCTAAAATTGCTGTTGAATTAGCTAAAAAATATCCTGATCTTTTAAAAGCAACC
+ATAGGTATCCATCCAAATGATGTTCATTTAGTTGATTTTAAAAAGACAAAAAAACAACTT
+AATGAACTATTAATAAATAACAGAAATTTCATAAGTTGTATTGGTGAATATGGTTTTGAT
+TATCACTACACAACAGAATTTATTGAATTGCAAAACAAATTCTTTGAGATGCAATTTGAA
+ATAGCTGAAACTAATAAATTGGTTCACATGCTTCATATTCGTGATGCTCATGAAAAAATT
+TATGAAATATTAACAAGATTAAAGCCAACTCAACCTGTGATTTTTCATTGTTTCAGTCAA
+GATATAAATATTGCTAAAAAGCTACTATCATTAAAAGATTTAAATATTGACATCTTCTTT
+TCTATCCCAGGGATAGTTACTTTTAAGAATGCTCAAGCATTACATGAAGCTTTAAAGATT
+ATTCCTAGTGAATTACTTTTAAGTGAAACTGACTCACCGTGA
+
+
+Results:
+Mycoplasma genitalium M6320, complete genome
+bit score: 1186 bits(642)        
+e-score: 0.0        
+identity %: 100%
+gap %: 0%
+starting position on query sequence(ATG, 1)
+YES, the starting position corresponds to the first AUG in the ORF.
